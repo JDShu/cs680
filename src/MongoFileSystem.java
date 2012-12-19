@@ -3,7 +3,9 @@ import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.MongoClient;
 
-import java.util.Stack;
+import java.net.UnknownHostException;
+
+import java.util.ArrayList;
 
 /**
  * @author      Hans Lo <hansshulo@gmail.com>
@@ -26,13 +28,12 @@ public class MongoFileSystem {
      * @param db Name of the database.
      * @param fsName Name of filesystem collection in the database.
      */
-    public MongoFileSystem(String address, String db, String fsName) {
+    public MongoFileSystem(String address, String db, String fsName) throws UnknownHostException {
         this.fs = FileSystem.getInstance();
         this.mongoClient = new MongoClient(address);
         this.db = mongoClient.getDB(db);
-        this.mongoFS = db.getCollection(fsName);
-        this.metadata = db.getCollection(fsName + "_metadata");
-        // TODO: implement loading
+        this.mongoFS = this.db.getCollection(fsName);
+        this.metadata = this.db.getCollection(fsName + "_metadata");
     }
 
     /**
@@ -43,8 +44,13 @@ public class MongoFileSystem {
      * @param fsName Name of filesystem collection in the database.
      * @param fs Filesystem to back.
      */
-    public MongoFileSystem(String address, String db, String fsName, Filesystem fs) {
+
+    public MongoFileSystem(String address, String db, String fsName, FileSystem fs) throws UnknownHostException {
         this.fs = fs;
+        this.mongoClient = new MongoClient(address);
+        this.db = mongoClient.getDB(db);
+        this.mongoFS = this.db.getCollection(fsName);
+        this.metadata = this.db.getCollection(fsName + "_metadata");
     }
 
     /**
@@ -52,33 +58,35 @@ public class MongoFileSystem {
      */
     public void saveDB() {
         // warning if database alreadt exists, let user confirm
-        createMongoDirectory(fs.getRoot());
+        createMongoDirectory(fs.getRoot(), null);
     }
 
-    private void createMongoDirectory(Directory directory) {
-        // Use visitor pattern? no because it requires some messy context
+    public void retrieveDB() {
+        //find root
+    }
 
+    private void createMongoDirectory(Directory directory, BasicDBObject parent) {
         // do a preorder walk through the filesystem tree
         // preorder operation: create the directory in mongodb
         BasicDBObject newFile = createFSElement(directory);
-
+        if (parent != null)
+            newFile.append("parent", parent.get("_id"));
+        else
+            newFile.append("parent", "none");
+        this.mongoFS.insert(newFile);
         for (FSElement e: directory.getChildren()) {
             if (e instanceof Directory) {
-                createMongoDirectory((Directory)e);
-            } else {
-
+                createMongoDirectory((Directory)e, newFile);
             }
         }
-
     }
 
     public BasicDBObject createFSElement(FSElement element) {
         BasicDBObject newFile = new BasicDBObject("name", element.getName()).
-                                           append("owner", element.getName()).
+                                           append("owner", element.getOwner()).
                                            append("created", element.getCreated()).
                                            append("last_modified", element.getLastModified()).
-                                           append("size", element.getSize()).
-                                           append("parent", mongoCurrent);
+                                           append("size", element.getSize());
 
         return newFile;
     }
@@ -89,6 +97,9 @@ public class MongoFileSystem {
      * Note: this will erase the current filesystem that is in memory.
      */
     public void retrieveFromDB() {
+        // check if root exists
+        // if it doesn't then error
+
     }
 
     /**
@@ -97,7 +108,7 @@ public class MongoFileSystem {
      * Note: this will erase the current filesystem that is in memory.
      */
     public void setRoot(Directory root) {
-        fs.setRoot();
+        //fs.setRoot();
         // TODO: Change the mongodb root metadata.
     }
 
