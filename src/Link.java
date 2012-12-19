@@ -9,8 +9,8 @@ class Link extends FSElement {
         setOwner(owner);
         setLastModified(created);
         setSize(size);
-        if (target == null)
-            throw new IllegalArgumentException("targert cannot be null");
+        //if (target == null)
+        //    throw new IllegalArgumentException("target cannot be null");
         this.target = target;
     }
 
@@ -24,6 +24,10 @@ class Link extends FSElement {
 
     public FSElement getTarget() {
         return this.target;
+    }
+
+    public void setTarget(FSElement target) {
+        this.target = target;
     }
 
     public int getDiskUtil() {

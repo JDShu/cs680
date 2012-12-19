@@ -17,6 +17,10 @@ public abstract class FSElement {
         return parent;
     }
 
+    public void setParent(Directory parent) {
+        this.parent = parent;
+    }
+
     abstract public boolean isLeaf();
     abstract public String getInfo();
     abstract public int getDiskUtil();

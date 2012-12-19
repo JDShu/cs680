@@ -1,11 +1,16 @@
 import com.mongodb.DBCollection;
 import com.mongodb.BasicDBObject;
+import com.mongodb.DBObject;
 import com.mongodb.DB;
 import com.mongodb.MongoClient;
+import org.bson.types.ObjectId;
+import com.mongodb.DBCursor;
 
 import java.net.UnknownHostException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Date;
 
 /**
  * @author      Hans Lo <hansshulo@gmail.com>
@@ -15,6 +20,9 @@ import java.util.ArrayList;
 public class MongoFileSystem {
 
     private FileSystem fs;
+    private HashMap<FSElement, ObjectId> memoryToMongo;
+    private ArrayList<Link> pendingLinks;
+
     MongoClient mongoClient;
     DBCollection mongoFS;
     DBCollection metadata;
@@ -57,26 +65,135 @@ public class MongoFileSystem {
      * Save the current filesystem in memory to the mongo database.
      */
     public void saveDB() {
-        // warning if database alreadt exists, let user confirm
+        // warning if database alreadt exists, let user confirm that current data will be lost
+        //drop db
+        this.mongoFS.drop();
+        this.metadata.drop();
+        this.memoryToMongo = new HashMap<FSElement, ObjectId>();
+        this.pendingLinks = new ArrayList<Link>();
         createMongoDirectory(fs.getRoot(), null);
+        for (Link link:this.pendingLinks) {
+
+            ObjectId linkId = this.memoryToMongo.get(link);
+            ObjectId targetId = this.memoryToMongo.get(link.getTarget());
+            BasicDBObject query = new BasicDBObject("_id", linkId);
+            BasicDBObject update = new BasicDBObject("$set",
+                                                     new BasicDBObject("target", targetId));
+            this.mongoFS.update(query, update);
+        }
     }
 
     public void retrieveDB() {
-        //find root
+        //find root from db metadata
+        BasicDBObject rootQuery = new BasicDBObject("root", new BasicDBObject("$exists", true));
+        DBCursor cursor = this.metadata.find(rootQuery);
+        DBObject root;
+        try {
+            while(cursor.hasNext()) {
+                root = cursor.next();
+                loadFileSystem((ObjectId)root.get("root"));
+            }
+        } finally {
+            cursor.close();
+        }
+    }
+
+    private void loadFileSystem(ObjectId rootId) {
+        BasicDBObject rootDir;
+        Directory rootDirectory;
+        DBCursor cursor = this.mongoFS.find(new BasicDBObject("_id", rootId));
+        try {
+            while(cursor.hasNext()) {
+                rootDir = (BasicDBObject)cursor.next();
+                String elementType = rootDir.getString("type");
+                String name = rootDir.getString("name");
+                String owner = rootDir.getString("owner");
+                Date created = rootDir.getDate("created");
+                int size = rootDir.getInt("size");
+                rootDirectory = createFSDirectory(rootDir, name, owner, created);
+                this.fs.setRoot(rootDirectory);
+            }
+        } finally {
+            cursor.close();
+        }
+    }
+
+    private Directory createFSDirectory(BasicDBObject directory,
+                                        String name,
+                                        String owner,
+                                        Date created) {
+        Directory newDir = new Directory(name, owner, created, null, this.fs);
+        ObjectId id = (ObjectId)directory.get("_id");
+        BasicDBObject childrenQuery = new BasicDBObject("parent", id);
+        DBObject current;
+        DBCursor cursor;
+        FSElement newElement;
+        cursor = this.mongoFS.find(childrenQuery);
+        try {
+            while(cursor.hasNext()) {
+                current = cursor.next();
+                newElement = FSElementFromDocument((BasicDBObject)current);
+                newElement.setParent(newDir);
+                newDir.appendChild(newElement);
+            }
+        } finally {
+            cursor.close();
+        }
+        return newDir;
+    }
+
+    private FSElement FSElementFromDocument(BasicDBObject doc) {
+        FSElement newElement;
+        String elementType = doc.getString("type");
+        String name = doc.getString("name");
+        String owner = doc.getString("owner");
+        Date created = doc.getDate("created");
+        //ObjectId parent = (ObjectId)doc.get("parent");
+        int size = doc.getInt("size");
+
+        if (elementType.equals("file")) {
+            newElement = new File(name, owner, created, null, size);
+        } else if (elementType.equals("link")) {
+            /* At this point, the target may not have been generated yet,
+               so we set it to null and deal with it later */
+            newElement = new Link(name, owner, created, null, null, size);
+        } else if (elementType.equals("directory")) {
+            newElement = createFSDirectory(doc, name, owner, created);
+        } else {
+            System.out.println("Warning: Unknown type in the database");
+            newElement = null;
+        }
+        return newElement;
     }
 
     private void createMongoDirectory(Directory directory, BasicDBObject parent) {
         // do a preorder walk through the filesystem tree
         // preorder operation: create the directory in mongodb
         BasicDBObject newFile = createFSElement(directory);
-        if (parent != null)
+        if (parent != null) {
             newFile.append("parent", parent.get("_id"));
-        else
-            newFile.append("parent", "none");
+        }
+        else {
+            newFile.append("parent", null);
+        }
         this.mongoFS.insert(newFile);
+        ObjectId dirId = (ObjectId)newFile.get( "_id" );
+        this.memoryToMongo.put(directory, dirId);
+        if (parent == null) {
+            this.metadata.insert(new BasicDBObject("root", dirId));
+        }
         for (FSElement e: directory.getChildren()) {
             if (e instanceof Directory) {
                 createMongoDirectory((Directory)e, newFile);
+            } else {
+                BasicDBObject nonDirectoryChild = createFSElement(e);
+                nonDirectoryChild.append("parent", newFile.get("_id"));
+                this.mongoFS.insert(nonDirectoryChild);
+                ObjectId childId = (ObjectId)nonDirectoryChild.get( "_id" );
+                this.memoryToMongo.put(e, childId);
+                if (e instanceof Link) {
+                    this.pendingLinks.add((Link)e);
+                }
             }
         }
     }
@@ -87,7 +204,12 @@ public class MongoFileSystem {
                                            append("created", element.getCreated()).
                                            append("last_modified", element.getLastModified()).
                                            append("size", element.getSize());
-
+        if (element instanceof Directory)
+            newFile.append("type", "directory");
+        else if (element instanceof File)
+            newFile.append("type", "file");
+        else if (element instanceof Link)
+            newFile.append("type", "link");
         return newFile;
     }
 

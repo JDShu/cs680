@@ -40,6 +40,8 @@ public class MongoFileSystemTest {
 
         try {
             MongoFileSystem mfs = new MongoFileSystem("localhost", "mfs", "test", fs);
+            mfs.showElements();
+            System.out.println();
             mfs.saveDB();
         } catch (UnknownHostException ex) {
             System.out.println("Unknown Host: " + ex);
