@@ -22,32 +22,17 @@ import java.util.Date;
 public class MongoFileSystem {
 
     private FileSystem fs;
+    /* Associate the FileSystem elements with their corresponding
+       database instances */
     private HashMap<FSElement, ObjectId> memoryToMongo;
     private HashMap<ObjectId, FSElement> mongoToMemory;
     private HashMap<Link, ObjectId> linkToTargetID;
     private ArrayList<Link> pendingLinks;
 
-
     MongoClient mongoClient;
     DBCollection mongoFS;
     DBCollection metadata;
     DB db;
-
-    /**
-     * Create a new filesystem that is backed by MongoDB. If it
-     * already exists, then load it into memory.
-     *
-     * @param address Address of database.
-     * @param db Name of the database.
-     * @param fsName Name of filesystem collection in the database.
-     */
-    public MongoFileSystem(String address, String db, String fsName) throws UnknownHostException {
-        this.fs = FileSystem.getInstance();
-        this.mongoClient = new MongoClient(address);
-        this.db = mongoClient.getDB(db);
-        this.mongoFS = this.db.getCollection(fsName);
-        this.metadata = this.db.getCollection(fsName + "_metadata");
-    }
 
     /**
      * Load an existing filesystem from memory and back it with MongoDB.
@@ -71,6 +56,7 @@ public class MongoFileSystem {
      * This will delete the existing content.
      */
     public void saveDB() {
+        // Delete the filesystem
         this.mongoFS.drop();
         this.metadata.drop();
         this.memoryToMongo = new HashMap<FSElement, ObjectId>();
@@ -105,6 +91,28 @@ public class MongoFileSystem {
         }
     }
 
+    /**
+     * Make a directory on the database.
+     */
+    public void makeDirectory(Directory newDir) {
+        ObjectId currentId = memoryToMongo.get(this.fs.getCurrent());
+
+        BasicDBObject newMongoDir = createFSElement(newDir);
+        newMongoDir.append("parent",currentId);
+        this.mongoFS.insert(newMongoDir);
+        this.memoryToMongo.put(newDir, (ObjectId)newMongoDir.get("_id"));
+    }
+
+    /**
+     * Convenience function to show the whole filesystem tree.
+     */
+    public void showElements() {
+        fs.showAllElements();
+    }
+
+    // We perform a depth first traversal on the database filesystem
+    // and create the corresponding in-memory object.
+    // Along the way we fill the mapping table
     private void loadFileSystem(ObjectId rootId) {
         BasicDBObject rootDir;
         Directory rootDirectory;
@@ -191,8 +199,6 @@ public class MongoFileSystem {
     }
 
     private void createMongoDirectory(Directory directory, BasicDBObject parent) {
-        // do a preorder walk through the filesystem tree
-        // preorder operation: create the directory in mongodb
         BasicDBObject newFile = createFSElement(directory);
         if (parent != null) {
             newFile.append("parent", parent.get("_id"));
@@ -235,18 +241,5 @@ public class MongoFileSystem {
         else if (element instanceof Link)
             newFile.append("type", "link");
         return newFile;
-    }
-
-    public void makeDirectory(Directory newDir) {
-        ObjectId currentId = memoryToMongo.get(this.fs.getCurrent());
-
-        BasicDBObject newMongoDir = createFSElement(newDir);
-        newMongoDir.append("parent",currentId);
-        this.mongoFS.insert(newMongoDir);
-        this.memoryToMongo.put(newDir, (ObjectId)newMongoDir.get("_id"));
-    }
-
-    public void showElements() {
-        fs.showAllElements();
     }
 }
