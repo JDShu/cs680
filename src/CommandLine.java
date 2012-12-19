@@ -109,7 +109,24 @@ public class CommandLine {
                                 newDir,
                                 fs.getCurrent().getChildren().size());
                     if (this.mongoFs != null) {
-                        this.mongoFs.makeDirectory(newDir);
+                        this.mongoFs.makeElement(newDir);
+                    }
+                }
+            else if (command[0].equals("mkfl"))
+                if (command.length < 3)
+                    System.out.println("Syntax: mkfl <file name> <file size>");
+                else {
+                    int size = Integer.parseInt(command[2]);
+                    File newFile = new File(command[1],
+                                            user,
+                                            new Date(),
+                                            fs.getCurrent(),
+                                            size);
+                    fs.addChild(fs.getCurrent(),
+                                newFile,
+                                fs.getCurrent().getChildren().size());
+                    if (this.mongoFs != null) {
+                        this.mongoFs.makeElement(newFile);
                     }
                 }
             else if (command[0].equals("mongo")) {

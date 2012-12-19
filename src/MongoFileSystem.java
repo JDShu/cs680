@@ -94,13 +94,12 @@ public class MongoFileSystem {
     /**
      * Make a directory on the database.
      */
-    public void makeDirectory(Directory newDir) {
+    public void makeElement(FSElement newElement) {
         ObjectId currentId = memoryToMongo.get(this.fs.getCurrent());
-
-        BasicDBObject newMongoDir = createFSElement(newDir);
-        newMongoDir.append("parent",currentId);
-        this.mongoFS.insert(newMongoDir);
-        this.memoryToMongo.put(newDir, (ObjectId)newMongoDir.get("_id"));
+        BasicDBObject newMongoElement = createFSElement(newElement);
+        newMongoElement.append("parent",currentId);
+        this.mongoFS.insert(newMongoElement);
+        this.memoryToMongo.put(newElement, (ObjectId)newMongoElement.get("_id"));
     }
 
     /**
