@@ -1,9 +1,14 @@
 import java.util.Date;
 import java.util.Scanner;
 import java.util.LinkedList;
+import java.net.UnknownHostException;
 
 public class CommandLine {
     FileSystem fs;
+    private MongoFileSystem mongoFs;
+    private String address;
+    private String db;
+    private String fsName;
 
     public CommandLine(FileSystem fs) {
         this.fs = fs;
@@ -16,6 +21,9 @@ public class CommandLine {
         System.out.println("Username: ");
         String user = userInput.next();
         System.out.println("Welcome " + user + "!");
+        Directory root = new Directory("root", user, new Date(), null, fs);
+        this.fs.setRoot(root);
+        this.fs.setCurrent(root);
         do {
             System.out.print(">>> ");
             input = userInput.next();
@@ -92,17 +100,58 @@ public class CommandLine {
                 if (command.length == 1)
                     System.out.println("Invalid command: Must specify a name for new directory");
                 else {
+                    Directory newDir = new Directory(command[1],
+                                                     user,
+                                                     new Date(),
+                                                     fs.getCurrent(),
+                                                     fs);
                     fs.addChild(fs.getCurrent(),
-                                new Directory(command[1],
-                                              user,
-                                              new Date(),
-                                              fs.getCurrent(),
-                                              fs),
+                                newDir,
                                 fs.getCurrent().getChildren().size());
+                    if (this.mongoFs != null) {
+                        this.mongoFs.makeDirectory(newDir);
+                    }
                 }
-
+            else if (command[0].equals("mongo")) {
+                handleMongoCommand(command);
+            }
         } while (!(command[0].equals("exit")));
 
+    }
+
+    private void handleMongoCommand(String[] command) {
+        if (command.length == 1) {
+            System.out.println("MongoFS Options: save, load, use, unuse" );
+        } else if (command[1].equals("save")) {
+            if (this.mongoFs != null)
+                this.mongoFs.saveDB();
+
+            else
+                System.out.println("No database configured.");
+        } else if (command[1].equals("load")){
+            if (this.mongoFs != null)
+                this.mongoFs.retrieveDB();
+            else
+                System.out.println("No database configured.");
+        } else if (command[1].equals("use")) {
+            if (command.length != 5)
+                System.out.println("Syntax: mongo use <db address> <db name> <filesystem name>");
+            else {
+                this.address = command[2];
+                this.db = command[3];
+                this.fsName = command[4];
+                 try {
+                     this.mongoFs = new MongoFileSystem(this.address, this.db, this.fsName, this.fs);
+                     System.out.println(this.address);
+                     System.out.println(this.db);
+                     System.out.println(this.fsName);
+                 } catch (UnknownHostException e) {
+                     System.out.println("Could not access filesystem: " + e);
+                 }
+            }
+        } else if (command[1].equals("unuse")) {
+            this.mongoFs = null;
+        }
     }
 
     private Directory getDirectoryFromName(String name, Directory current) {

@@ -13,6 +13,8 @@ public class MongoFileSystemTest2 {
             mfs2.retrieveDB();
             mfs2.showElements();
             mfs2.saveDB();
+            mfs2.retrieveDB();
+            mfs2.showElements();
         } catch (UnknownHostException ex) {
             System.out.println("Unknown Host: " + ex);
         }

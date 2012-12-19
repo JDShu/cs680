@@ -5,8 +5,8 @@ import java.net.UnknownHostException;
 public class MongoFileSystemTest {
     public static void main(String[] args) {
         FileSystem fs = FileSystem.getInstance();
-
-        String owner = "John";
+        /*
+                String owner = "John";
         Directory root = new Directory("root", owner, new Date(2012,10,12), null, fs);
         fs.setRoot(root);
         Directory windows = new Directory("Windows", owner, new Date(2012,10,13), root, fs);
@@ -45,6 +45,8 @@ public class MongoFileSystemTest {
             mfs.saveDB();
         } catch (UnknownHostException ex) {
             System.out.println("Unknown Host: " + ex);
-        }
+            }*/
+        CommandLine cmd = new CommandLine(fs);
+        cmd.main();
     }
 }

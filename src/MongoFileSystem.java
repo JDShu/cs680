@@ -9,7 +9,9 @@ import com.mongodb.DBCursor;
 import java.net.UnknownHostException;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Date;
 
 /**
@@ -21,7 +23,10 @@ public class MongoFileSystem {
 
     private FileSystem fs;
     private HashMap<FSElement, ObjectId> memoryToMongo;
+    private HashMap<ObjectId, FSElement> mongoToMemory;
+    private HashMap<Link, ObjectId> linkToTargetID;
     private ArrayList<Link> pendingLinks;
+
 
     MongoClient mongoClient;
     DBCollection mongoFS;
@@ -63,10 +68,9 @@ public class MongoFileSystem {
 
     /**
      * Save the current filesystem in memory to the mongo database.
+     * This will delete the existing content.
      */
     public void saveDB() {
-        // warning if database alreadt exists, let user confirm that current data will be lost
-        //drop db
         this.mongoFS.drop();
         this.metadata.drop();
         this.memoryToMongo = new HashMap<FSElement, ObjectId>();
@@ -83,8 +87,11 @@ public class MongoFileSystem {
         }
     }
 
+    /**
+     * Load the filesystem in the database into memory.
+     * This will delete the existing content in memory.
+     */
     public void retrieveDB() {
-        //find root from db metadata
         BasicDBObject rootQuery = new BasicDBObject("root", new BasicDBObject("$exists", true));
         DBCursor cursor = this.metadata.find(rootQuery);
         DBObject root;
@@ -104,6 +111,9 @@ public class MongoFileSystem {
         DBCursor cursor = this.mongoFS.find(new BasicDBObject("_id", rootId));
         try {
             while(cursor.hasNext()) {
+                this.linkToTargetID = new HashMap<Link, ObjectId>();
+                this.mongoToMemory = new HashMap<ObjectId, FSElement>();
+                this.memoryToMongo = new HashMap<FSElement, ObjectId>();
                 rootDir = (BasicDBObject)cursor.next();
                 String elementType = rootDir.getString("type");
                 String name = rootDir.getString("name");
@@ -112,6 +122,17 @@ public class MongoFileSystem {
                 int size = rootDir.getInt("size");
                 rootDirectory = createFSDirectory(rootDir, name, owner, created);
                 this.fs.setRoot(rootDirectory);
+                this.memoryToMongo.put(rootDirectory, (ObjectId)rootDir.get("_id"));
+                Iterator it = this.linkToTargetID.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry entry = (Map.Entry) it.next();
+                    Link link = (Link)entry.getKey();
+                    ObjectId targetId = (ObjectId)entry.getValue();
+                    FSElement target = this.mongoToMemory.get(targetId);
+                    link.setTarget(target);
+                }
+                this.fs.setRoot(rootDirectory);
+                this.fs.setCurrent(rootDirectory);
             }
         } finally {
             cursor.close();
@@ -148,7 +169,6 @@ public class MongoFileSystem {
         String name = doc.getString("name");
         String owner = doc.getString("owner");
         Date created = doc.getDate("created");
-        //ObjectId parent = (ObjectId)doc.get("parent");
         int size = doc.getInt("size");
 
         if (elementType.equals("file")) {
@@ -156,13 +176,17 @@ public class MongoFileSystem {
         } else if (elementType.equals("link")) {
             /* At this point, the target may not have been generated yet,
                so we set it to null and deal with it later */
-            newElement = new Link(name, owner, created, null, null, size);
+            Link newLink = new Link(name, owner, created, null, null, size);
+            this.linkToTargetID.put(newLink, (ObjectId)doc.get("target"));
+            newElement = newLink;
         } else if (elementType.equals("directory")) {
             newElement = createFSDirectory(doc, name, owner, created);
         } else {
             System.out.println("Warning: Unknown type in the database");
             newElement = null;
         }
+        this.mongoToMemory.put((ObjectId)doc.get("_id"), newElement);
+        this.memoryToMongo.put(newElement, (ObjectId)doc.get("_id"));
         return newElement;
     }
 
@@ -213,63 +237,16 @@ public class MongoFileSystem {
         return newFile;
     }
 
-    /**
-     * Load recreate the filesystem in memory from the database.
-     *
-     * Note: this will erase the current filesystem that is in memory.
-     */
-    public void retrieveFromDB() {
-        // check if root exists
-        // if it doesn't then error
+    public void makeDirectory(Directory newDir) {
+        ObjectId currentId = memoryToMongo.get(this.fs.getCurrent());
 
-    }
-
-    /**
-     * Set the root directory on both the in-memory filesystem and the database.
-     *
-     * Note: this will erase the current filesystem that is in memory.
-     */
-    public void setRoot(Directory root) {
-        //fs.setRoot();
-        // TODO: Change the mongodb root metadata.
-    }
-
-    public Directory getRoot() {
-        return fs.getRoot();
-    }
-
-    public void setCurrent(Directory current) {
-        fs.setCurrent(current);
-    }
-
-    public Directory getCurrent() {
-        return fs.getCurrent();
-    }
-
-    /**
-     * Add the file system element to both the filesystem in memory and the database.
-     *
-     * Note: this will erase the current filesystem that is in memory.
-     */
-    public void addChild(Directory parent, FSElement child, int index) {
-        fs.addChild(parent, child, index);
-        // TODO: update mongodb so that the entry is added and dir tree is updated
-    }
-
-    public FSElement getChild(Directory parent, int index) {
-        return fs.getChild(parent, index);
-    }
-
-    public String getFSElementInfo(FSElement element) {
-        return fs.getFSElementInfo(element);
-    }
-
-    public ArrayList<String> getCurrentChildrenInfo() {
-        return fs.getCurrentChildrenInfo();
+        BasicDBObject newMongoDir = createFSElement(newDir);
+        newMongoDir.append("parent",currentId);
+        this.mongoFS.insert(newMongoDir);
+        this.memoryToMongo.put(newDir, (ObjectId)newMongoDir.get("_id"));
     }
 
     public void showElements() {
         fs.showAllElements();
     }
-
 }

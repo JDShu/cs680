@@ -9,8 +9,24 @@
   <property name="build.dir"   value="build"/>
   <property name="classes.dir" value="${build.dir}/classes"/>
   <property name="jar.dir"     value="${build.dir}/jar"/>
+  <property name="lib.dir"     value="lib"/>
 
-  <property name="main-class"  value="FileSystemTest"/>
+  <property name="main-class"  value="MongoFileSystemTest"/>
+
+  <path id="build-classpath">
+    <fileset dir="${lib.dir}">
+      <include name="*.jar"/>
+    </fileset>
+  </path>
+
+  <path id="run-classpath">
+    <fileset dir="${lib.dir}">
+      <include name="*.jar"/>
+    </fileset>
+    <fileset dir="${jar.dir}">
+      <include name="*.jar"/>
+    </fileset>
+  </path>
 
   <target name="clean">
     <delete dir="${build.dir}" />
@@ -21,7 +37,9 @@
     <javac srcdir="${src.dir}"
            destdir="${classes.dir}"
            debug="on"
-           includeantruntime="false"/>
+           includeantruntime="false">
+      <classpath refid="build-classpath"/>
+    </javac>
   </target>
 
   <target name="jar" depends="compile">
@@ -34,7 +52,9 @@
   </target>
 
   <target name="run" depends="jar">
-    <java jar="${jar.dir}/${ant.project.name}.jar" fork="true"/>
+    <java classname="MongoFileSystemTest">
+      <classpath refid="run-classpath"/>
+    </java>
   </target>
 
   <target name="clean-build" depends="clean,jar"/>
