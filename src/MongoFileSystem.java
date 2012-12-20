@@ -92,7 +92,7 @@ public class MongoFileSystem {
     }
 
     /**
-     * Make a directory on the database.
+     * Make an element on the database.
      */
     public void makeElement(FSElement newElement) {
         ObjectId currentId = memoryToMongo.get(this.fs.getCurrent());
@@ -101,6 +101,13 @@ public class MongoFileSystem {
         this.mongoFS.insert(newMongoElement);
         this.memoryToMongo.put(newElement, (ObjectId)newMongoElement.get("_id"));
     }
+
+    public void deleteElement(FSElement element) {
+        ObjectId elementId = memoryToMongo.get(element);
+        BasicDBObject removeQuery = new BasicDBObject("_id", elementId);
+        this.mongoFS.remove(removeQuery);
+    }
+
 
     /**
      * Convenience function to show the whole filesystem tree.

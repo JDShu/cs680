@@ -44,6 +44,10 @@ class Directory extends FSElement {
         this.children.add(index, child);
     }
 
+    public void removeChild(FSElement element) {
+        this.children.remove(element);
+    }
+
     public int getDiskUtil() {
         return 0;
     }

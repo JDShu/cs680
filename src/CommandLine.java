@@ -112,7 +112,7 @@ public class CommandLine {
                         this.mongoFs.makeElement(newDir);
                     }
                 }
-            else if (command[0].equals("mkfl"))
+            else if (command[0].equals("mkfl")) {
                 if (command.length < 3)
                     System.out.println("Syntax: mkfl <file name> <file size>");
                 else {
@@ -129,6 +129,24 @@ public class CommandLine {
                         this.mongoFs.makeElement(newFile);
                     }
                 }
+            }
+            else if (command[0].equals("rm")) {
+                if (command.length < 2) {
+                    System.out.println("Syntax: rm <file>");
+                } else {
+                    FSElement element = getElementFromName(command[1],
+                                                           fs.getCurrent());
+                    if (element != null) {
+                        if (this.mongoFs != null) {
+                            this.mongoFs.deleteElement(element);
+                        }
+                        element.getParent().removeChild(element);
+                    }
+                    else
+                        System.out.println("No such file!");
+                }
+
+            }
             else if (command[0].equals("mongo")) {
                 handleMongoCommand(command);
             }
